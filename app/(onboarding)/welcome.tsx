@@ -113,6 +113,7 @@ export default function WelcomeScreen() {
           </AppText>
 
           {/* Saiba mais */}
+          {/* TODO: navigate to about/onboarding info screen when implemented */}
           <TouchableOpacity style={styles.infoButton} onPress={() => {}}>
             <Info size={16} color={colors.textInverse} />
             <AppText size="sm" color="inverse">Saiba mais</AppText>
