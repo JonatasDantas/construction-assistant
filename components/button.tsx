@@ -25,7 +25,8 @@ const variantStyles: Record<
   { bg: string; textColor: 'inverse' | 'primary' | 'brand' }
 > = {
   primary: { bg: colors.primary, textColor: 'inverse' },
-  secondary: { bg: '#F3F4F6', textColor: 'primary' },
+  secondary: { bg: colors.borderLight, textColor: 'primary' },
+  // ghost: intended for use over dark or gradient backgrounds only (e.g. camera screen, gradient header)
   ghost: { bg: colors.glassLight, textColor: 'inverse' },
   destructive: { bg: colors.destructive, textColor: 'inverse' },
 };
@@ -76,7 +77,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: spacing[12],
   },
   fullWidth: {
     width: '100%',
