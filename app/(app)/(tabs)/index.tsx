@@ -7,6 +7,9 @@ import { StatsCard } from '@/components/stats-card';
 import { AppText } from '@/components/app-text';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
+import { shadows } from '@/theme/shadows';
+
+const TAB_BAR_HEIGHT = 60; // matches tabBarStyle.height in (tabs)/_layout.tsx
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -46,7 +49,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 88,
+    bottom: TAB_BAR_HEIGHT + spacing[4], // spacing[4] = 16, total 76
     right: spacing[6],
     width: 56,
     height: 56,
@@ -54,10 +57,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    ...shadows.lg,
   },
 });

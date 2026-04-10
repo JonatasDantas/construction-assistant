@@ -1,6 +1,6 @@
 import React from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  SafeAreaView,
   ScrollView,
   View,
   StyleSheet,
