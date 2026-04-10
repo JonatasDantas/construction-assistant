@@ -20,7 +20,7 @@ export function BottomNavTab({
       onLongPress={onLongPress ?? undefined}
       activeOpacity={0.7}
     >
-      {isActive && <View style={styles.indicator} />}
+      <View style={[styles.indicator, !isActive && styles.indicatorHidden]} />
       {children}
     </TouchableOpacity>
   );
@@ -42,6 +42,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: colors.primaryLight,
     borderRadius: radius.md,
-    zIndex: -1,
+  },
+  indicatorHidden: {
+    opacity: 0,
   },
 });

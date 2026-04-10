@@ -18,6 +18,7 @@ export const colors = {
   // Borders
   border: '#E5E7EB',
   borderLight: '#F3F4F6',
+  inputBackground: '#F3F3F5',
 
   // Semantic
   destructive: '#EF4444',

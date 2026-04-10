@@ -7,15 +7,10 @@ import { shadows } from '@/theme/shadows';
 import { AppText } from './app-text';
 
 interface ScreenHeaderProps {
-  /** Back button pattern */
   onBack?: () => void;
-  /** Title shown in back + title patterns */
   title?: string;
-  /** Subtitle shown below title */
   subtitle?: string;
-  /** Action node rendered on the right (e.g. share icon) */
   action?: React.ReactNode;
-  /** Project selector pattern — renders project name + chevron */
   projectName?: string;
   onProjectPress?: () => void;
 }
@@ -28,45 +23,38 @@ export function ScreenHeader({
   projectName,
   onProjectPress,
 }: ScreenHeaderProps) {
+  const leftContent = onBack ? (
+    <>
+      <TouchableOpacity onPress={onBack} style={styles.backButton} hitSlop={8}>
+        <ArrowLeft size={20} color={colors.textPrimary} />
+      </TouchableOpacity>
+      {title && (
+        <View>
+          <AppText size="base" weight="semibold">{title}</AppText>
+          {subtitle && <AppText size="sm" color="secondary">{subtitle}</AppText>}
+        </View>
+      )}
+    </>
+  ) : projectName !== undefined ? (
+    <TouchableOpacity onPress={onProjectPress} style={styles.projectSelector}>
+      <AppText size="xs" color="secondary">Projeto Atual</AppText>
+      <View style={styles.projectNameRow}>
+        <AppText size="base" weight="medium" numberOfLines={1} style={styles.projectName}>
+          {projectName}
+        </AppText>
+        <ChevronDown size={16} color={colors.textMuted} />
+      </View>
+    </TouchableOpacity>
+  ) : (title || subtitle) ? (
+    <View>
+      {title && <AppText size="base" weight="semibold">{title}</AppText>}
+      {subtitle && <AppText size="sm" color="secondary">{subtitle}</AppText>}
+    </View>
+  ) : null;
+
   return (
     <View style={styles.container}>
-      {/* Left: back button or project selector */}
-      <View style={styles.left}>
-        {onBack && (
-          <TouchableOpacity onPress={onBack} style={styles.backButton} hitSlop={8}>
-            <ArrowLeft size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-        )}
-
-        {projectName !== undefined ? (
-          <TouchableOpacity onPress={onProjectPress} style={styles.projectSelector}>
-            <AppText size="xs" color="secondary">
-              Projeto Atual
-            </AppText>
-            <View style={styles.projectNameRow}>
-              <AppText size="base" weight="medium" numberOfLines={1} style={styles.projectName}>
-                {projectName}
-              </AppText>
-              <ChevronDown size={16} color={colors.textMuted} />
-            </View>
-          </TouchableOpacity>
-        ) : (
-          <View>
-            {title && (
-              <AppText size="base" weight="semibold">
-                {title}
-              </AppText>
-            )}
-            {subtitle && (
-              <AppText size="sm" color="secondary">
-                {subtitle}
-              </AppText>
-            )}
-          </View>
-        )}
-      </View>
-
-      {/* Right: optional action */}
+      <View style={styles.left}>{leftContent}</View>
       {action && <View style={styles.action}>{action}</View>}
     </View>
   );
