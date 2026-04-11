@@ -6,9 +6,9 @@ import { ScreenHeader } from '@/components/screen-header';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
-import { entries } from '@/data/mock-data';
+import { entries, projects } from '@/data/mock-data';
 
-const TAB_BAR_HEIGHT = 60;
+const TAB_BAR_HEIGHT = 60; // matches tabBarStyle.height in (tabs)/_layout.tsx
 
 function getLocalDateStr(): string {
   return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
@@ -63,7 +63,7 @@ export default function ReportScreen() {
                   Diário de Obras
                 </AppText>
                 <AppText size="sm" color="inverse" style={styles.docProject}>
-                  Edifício Residencial Parque das Flores
+                  {projects[0].name}
                 </AppText>
               </View>
             </View>
@@ -74,6 +74,11 @@ export default function ReportScreen() {
 
           {/* Document Content */}
           <View style={styles.docContent}>
+            {todayEntries.length === 0 && (
+              <AppText size="sm" color="secondary" style={styles.emptyState}>
+                Nenhum registro encontrado para hoje.
+              </AppText>
+            )}
             {todayEntries.map((entry, index) => (
               <View key={entry.id}>
                 {index > 0 && <View style={styles.entrySeparator} />}
@@ -281,6 +286,10 @@ const styles = StyleSheet.create({
   },
   footerText: {
     textAlign: 'center',
+  },
+  emptyState: {
+    textAlign: 'center',
+    paddingVertical: spacing[8],
   },
   // Action buttons row
   actionsRow: {
