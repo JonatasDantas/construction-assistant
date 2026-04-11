@@ -41,6 +41,7 @@ async function mockSummarizeText(_text: string): Promise<StructuredEntry> {
 
 // --- Screen ---
 
+// Intentionally not in theme; value matches colors.destructive (#EF4444)
 const RECORDING_RED = '#EF4444';
 const MIC_SIZE = 96;
 
@@ -74,19 +75,20 @@ export default function VoiceInputScreen() {
     );
     loop1.start();
 
+    let loop2: Animated.CompositeAnimation | null = null;
     const timer = setTimeout(() => {
-      const loop2 = Animated.loop(
+      loop2 = Animated.loop(
         Animated.sequence([
           Animated.timing(pulse2, { toValue: 1, duration: 1100, useNativeDriver: true }),
           Animated.timing(pulse2, { toValue: 0, duration: 0, useNativeDriver: true }),
         ]),
       );
       loop2.start();
-      return () => loop2.stop();
     }, 500);
 
     return () => {
       loop1.stop();
+      loop2?.stop();
       clearTimeout(timer);
       pulse1.setValue(0);
       pulse2.setValue(0);
@@ -161,11 +163,16 @@ export default function VoiceInputScreen() {
       // Continue with mock even if recording cleanup fails
     }
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-    const text = await mockTranscribeAudio(uri);
-    const entry = await mockSummarizeText(text);
-    setTranscription(text);
-    setStructured(entry);
-    setStage('result');
+    try {
+      const text = await mockTranscribeAudio(uri);
+      const entry = await mockSummarizeText(text);
+      setTranscription(text);
+      setStructured(entry);
+      setStage('result');
+    } catch {
+      Alert.alert('Erro', 'Não foi possível processar o áudio. Tente novamente.');
+      setStage('idle');
+    }
   };
 
   return (
