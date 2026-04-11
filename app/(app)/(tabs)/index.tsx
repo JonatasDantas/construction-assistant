@@ -50,11 +50,13 @@ type GroupedEntries = { label: string; items: typeof entries }[];
 function groupEntriesByDate(entriesList: typeof entries): GroupedEntries {
   const map: Record<string, typeof entries> = {};
   for (const entry of entriesList) {
-    const label = formatDateLabel(entry.date);
-    if (!map[label]) map[label] = [];
-    map[label].push(entry);
+    if (!map[entry.date]) map[entry.date] = [];
+    map[entry.date].push(entry);
   }
-  return Object.entries(map).map(([label, items]) => ({ label, items }));
+  return Object.entries(map).map(([date, items]) => ({
+    label: formatDateLabel(date),
+    items,
+  }));
 }
 
 export default function HomeScreen() {
@@ -82,6 +84,7 @@ export default function HomeScreen() {
                 key={action.id}
                 style={styles.quickActionButton}
                 activeOpacity={0.7}
+                disabled={!action.route}
                 onPress={action.route ? () => router.push(action.route as Href) : undefined}
               >
                 <View style={styles.quickActionIconWrap}>
@@ -108,7 +111,7 @@ export default function HomeScreen() {
         {/* Timeline */}
         {grouped.map(({ label, items }) => (
           <View key={label} style={styles.dateGroup}>
-            <AppText size="sm" weight="medium" color="secondary" style={styles.dateLabel}>
+            <AppText size="sm" weight="medium" color="secondary">
               {label}
             </AppText>
             <View style={styles.entryList}>
@@ -118,6 +121,7 @@ export default function HomeScreen() {
                     source={{ uri: entry.photo }}
                     style={styles.entryImage}
                     resizeMode="cover"
+                    alt={entry.description}
                   />
                   <View style={styles.entryContent}>
                     <View style={styles.pillRow}>
@@ -219,7 +223,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing[8],
     gap: spacing[3],
   },
-  dateLabel: {},
   entryList: {
     gap: spacing[4],
   },
