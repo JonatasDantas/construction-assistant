@@ -28,6 +28,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-av",
+        {
+          "microphonePermission": "Permitir que o Diário de Obras acesse o microfone para gravar registros de obra."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
