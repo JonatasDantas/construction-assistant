@@ -34,6 +34,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Permitir que o Diário de Obras acesse a câmera para fotografar registros de obra.",
+          "photosPermission": "Permitir que o Diário de Obras acesse a galeria para adicionar fotos aos registros."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
