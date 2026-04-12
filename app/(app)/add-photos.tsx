@@ -32,7 +32,7 @@ export default function AddPhotosScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.8,
     });
     if (!result.canceled) {
@@ -50,7 +50,7 @@ export default function AddPhotosScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.8,
       allowsMultipleSelection: true,
       selectionLimit: MAX_PHOTOS - photos.length,
@@ -108,7 +108,7 @@ export default function AddPhotosScreen() {
         ) : (
           <View style={styles.grid}>
             {photos.map((uri, index) => (
-              <View key={index} style={styles.thumbnailContainer}>
+              <View key={uri} style={styles.thumbnailContainer}>
                 <Image
                   source={{ uri }}
                   style={styles.thumbnailImage}
@@ -117,7 +117,7 @@ export default function AddPhotosScreen() {
                 <TouchableOpacity
                   style={styles.removeButton}
                   onPress={() => handleRemove(index)}
-                  hitSlop={4}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                 >
                   <X size={12} color={colors.textInverse} />
                 </TouchableOpacity>
