@@ -1,0 +1,4 @@
+pytest
+pytest-mock
+moto[dynamodb,s3,sqs,cognitoidentityprovider]
+boto3
