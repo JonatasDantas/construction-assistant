@@ -7,9 +7,11 @@ import { ScreenHeader } from '@/components/screen-header';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { projects } from '@/data/mock-data';
+import { useProject } from '@/context/project-context';
 
 export default function ProjectsScreen() {
   const router = useRouter();
+  const { setActiveProject } = useProject();
 
   return (
     <View style={styles.root}>
@@ -26,7 +28,10 @@ export default function ProjectsScreen() {
           <TouchableOpacity
             key={project.id}
             activeOpacity={0.8}
-            onPress={() => router.navigate('/(app)/(tabs)')}
+            onPress={() => {
+              setActiveProject(project.id);
+              router.navigate('/(app)/(tabs)');
+            }}
           >
             <Card shadow="sm" radius="xl">
               <View style={styles.cardContent}>
