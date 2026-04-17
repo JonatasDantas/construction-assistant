@@ -93,6 +93,8 @@ export default function VoiceInputScreen() {
       pulse1.setValue(0);
       pulse2.setValue(0);
     };
+  // pulse1/pulse2 are Animated.Value refs (useRef.current) — stable, safe to omit
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
   // Spin: continuous 360° rotation
@@ -111,6 +113,8 @@ export default function VoiceInputScreen() {
       loop.stop();
       spin.setValue(0);
     };
+  // spin is an Animated.Value ref (useRef.current) — stable, safe to omit
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
   // Cleanup recording on unmount
@@ -259,7 +263,7 @@ export default function VoiceInputScreen() {
             <View style={styles.transcriptionBox}>
               <AppText size="xs" color="secondary">Transcrição</AppText>
               <AppText size="sm" style={styles.transcriptionText}>
-                "{transcription}"
+                {'"'}{transcription}{'"'}
               </AppText>
             </View>
 

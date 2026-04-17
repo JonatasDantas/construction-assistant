@@ -1,5 +1,6 @@
 import { View, ScrollView, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, Href } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mic, Camera, FileText, Calendar, Sparkles, Users, Clock, Plus } from 'lucide-react-native';
 import { AppText } from '@/components/app-text';
 import { Card } from '@/components/card';
@@ -10,9 +11,7 @@ import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
 import { entries } from '@/data/mock-data';
 
-const TAB_BAR_HEIGHT = 60;
 const FAB_SIZE = 56;
-const FAB_BOTTOM = TAB_BAR_HEIGHT + spacing[4];
 
 interface QuickAction {
   id: string;
@@ -61,6 +60,9 @@ function groupEntriesByDate(entriesList: typeof entries): GroupedEntries {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 60 + insets.bottom;
+  const fabBottom = tabBarHeight + spacing[4];
   const grouped = groupEntriesByDate(entries);
 
   return (
@@ -72,7 +74,7 @@ export default function HomeScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: fabBottom + FAB_SIZE + spacing[4] }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Quick Actions */}
@@ -159,7 +161,7 @@ export default function HomeScreen() {
 
       {/* FAB */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: fabBottom }]}
         onPress={() => router.push('/(app)/voice-input')}
         activeOpacity={0.85}
       >
@@ -179,7 +181,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing[4],
-    paddingBottom: FAB_BOTTOM + FAB_SIZE + spacing[4],
   },
   // Quick Actions
   quickActions: {
@@ -271,7 +272,6 @@ const styles = StyleSheet.create({
   // FAB
   fab: {
     position: 'absolute',
-    bottom: FAB_BOTTOM,
     right: spacing[6],
     width: FAB_SIZE,
     height: FAB_SIZE,

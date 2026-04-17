@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown, ArrowLeft } from 'lucide-react-native';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
@@ -52,8 +53,10 @@ export function ScreenHeader({
     </View>
   ) : null;
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + spacing[3] }]}>
       <View style={styles.left}>{leftContent}</View>
       {action && <View style={styles.action}>{action}</View>}
     </View>

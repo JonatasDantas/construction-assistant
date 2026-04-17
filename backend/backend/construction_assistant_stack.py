@@ -27,7 +27,7 @@ class ConstructionAssistantStack(Stack):
             auto_verify=cognito.AutoVerifiedAttrs(email=True),
             removal_policy=RemovalPolicy.DESTROY,
         )
-        cognito.UserPoolClient(
+        user_pool_client = cognito.UserPoolClient(
             self, "UserPoolClient",
             user_pool=user_pool,
             auth_flows=cognito.AuthFlow(user_password=True, user_srp=True),
@@ -65,22 +65,25 @@ class ConstructionAssistantStack(Stack):
             "BUCKET_NAME": bucket.bucket_name,
             "QUEUE_URL": voice_queue.queue_url,
             "USER_POOL_ID": user_pool.user_pool_id,
+            "USER_POOL_CLIENT_ID": user_pool_client.user_pool_client_id,
         }
 
-        def make_lambda(id: str, handler_path: str) -> lambda_.Function:
+        def make_lambda(id: str, handler_path: str, timeout: Duration = Duration.seconds(30)) -> lambda_.Function:
             return lambda_.Function(
                 self, id,
                 runtime=lambda_.Runtime.PYTHON_3_11,
                 code=lambda_.Code.from_asset("lambdas"),
                 handler=handler_path,
                 environment=common_env,
+                timeout=timeout,
             )
 
         projects_fn = make_lambda("ProjectsFn", "projects.handler.handler")
         entries_fn = make_lambda("EntriesFn", "entries.handler.handler")
         photos_fn = make_lambda("PhotosFn", "photos.handler.handler")
         voice_submit_fn = make_lambda("VoiceSubmitFn", "voice.submit_handler.handler")
-        voice_process_fn = make_lambda("VoiceProcessFn", "voice.process_handler.handler")
+        # Timeout must match queue visibility_timeout to prevent re-delivery during processing
+        voice_process_fn = make_lambda("VoiceProcessFn", "voice.process_handler.handler", timeout=Duration.seconds(300))
 
         # --- Permissions ---
         for fn in [projects_fn, entries_fn, photos_fn, voice_submit_fn, voice_process_fn]:

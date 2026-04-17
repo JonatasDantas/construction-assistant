@@ -14,8 +14,8 @@
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `backend/construction_assistant_stack.py` | Create | Rename from `backend_stack.py`; all AWS resources defined here |
-| `backend/backend_stack.py` | Delete | Replaced by above |
+| `backend/backend/construction_assistant_stack.py` | Create | Rename from `backend_stack.py`; all AWS resources defined here |
+| `backend/backend/backend_stack.py` | Delete | Replaced by above |
 | `app.py` | Modify | Import new stack class |
 | `lambdas/shared/__init__.py` | Create | Package marker |
 | `lambdas/shared/response.py` | Create | HTTP response builder helpers (`ok`, `error`) |

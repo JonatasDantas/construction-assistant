@@ -26,7 +26,7 @@ export default function ProjectsScreen() {
           <TouchableOpacity
             key={project.id}
             activeOpacity={0.8}
-            onPress={() => router.navigate('/(app)/(tabs)/')}
+            onPress={() => router.navigate('/(app)/(tabs)')}
           >
             <Card shadow="sm" radius="xl">
               <View style={styles.cardContent}>

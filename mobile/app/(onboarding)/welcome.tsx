@@ -36,8 +36,6 @@ const FEATURES = [
   },
 ] as const;
 
-type Feature = (typeof FEATURES)[number];
-
 const featureRows = [FEATURES.slice(0, 2), FEATURES.slice(2, 4)];
 
 export default function WelcomeScreen() {
@@ -45,7 +43,7 @@ export default function WelcomeScreen() {
 
   const handleStart = async () => {
     await completeOnboarding();
-    router.replace('/(app)/(tabs)/');
+    router.replace('/(app)/(tabs)');
   };
 
   return (

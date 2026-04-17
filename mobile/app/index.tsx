@@ -15,7 +15,7 @@ export default function Index() {
   }
 
   return (
-    <Redirect href={hasCompleted ? '/(app)/(tabs)/' : '/(onboarding)/welcome'} />
+    <Redirect href={hasCompleted ? '/(app)/(tabs)' : '/(onboarding)/welcome'} />
   );
 }
 
