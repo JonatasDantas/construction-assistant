@@ -68,7 +68,12 @@ class ConstructionAssistantStack(Stack):
             "USER_POOL_CLIENT_ID": user_pool_client.user_pool_client_id,
         }
 
-        def make_lambda(id: str, handler_path: str, timeout: Duration = Duration.seconds(30)) -> lambda_.Function:
+        def make_lambda(
+            id: str,
+            handler_path: str,
+            timeout: Duration = Duration.seconds(30),
+            memory_size: int = 128,
+        ) -> lambda_.Function:
             return lambda_.Function(
                 self, id,
                 runtime=lambda_.Runtime.PYTHON_3_11,
@@ -76,6 +81,7 @@ class ConstructionAssistantStack(Stack):
                 handler=handler_path,
                 environment=common_env,
                 timeout=timeout,
+                memory_size=memory_size,
             )
 
         projects_fn = make_lambda("ProjectsFn", "projects.handler.handler")
@@ -84,13 +90,15 @@ class ConstructionAssistantStack(Stack):
         voice_submit_fn = make_lambda("VoiceSubmitFn", "voice.submit_handler.handler")
         # Timeout must match queue visibility_timeout to prevent re-delivery during processing
         voice_process_fn = make_lambda("VoiceProcessFn", "voice.process_handler.handler", timeout=Duration.seconds(300))
+        reports_fn = make_lambda("ReportsFn", "reports.handler.handler", memory_size=512)
 
         # --- Permissions ---
-        for fn in [projects_fn, entries_fn, photos_fn, voice_submit_fn, voice_process_fn]:
+        for fn in [projects_fn, entries_fn, photos_fn, voice_submit_fn, voice_process_fn, reports_fn]:
             table.grant_read_write_data(fn)
 
         bucket.grant_put(photos_fn)
         bucket.grant_put(voice_submit_fn)
+        bucket.grant_read_write(reports_fn)
         voice_queue.grant_send_messages(voice_submit_fn)
         voice_process_fn.add_event_source(
             event_sources.SqsEventSource(voice_queue, batch_size=1)
@@ -170,6 +178,14 @@ class ConstructionAssistantStack(Stack):
         voice_r = api.root.add_resource("voice")
         submit_r = voice_r.add_resource("submit")
         submit_r.add_method("POST", voice_submit_int,
+            authorizer=authorizer,
+            authorization_type=apigw.AuthorizationType.COGNITO,
+        )
+
+        # /reports
+        reports_int = apigw.LambdaIntegration(reports_fn)
+        reports_r = api.root.add_resource("reports")
+        reports_r.add_method("POST", reports_int,
             authorizer=authorizer,
             authorization_type=apigw.AuthorizationType.COGNITO,
         )
