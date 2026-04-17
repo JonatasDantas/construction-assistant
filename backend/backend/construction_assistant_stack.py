@@ -152,6 +152,12 @@ class ConstructionAssistantStack(Stack):
             authorization_type=apigw.AuthorizationType.COGNITO,
         )
 
+        entry_r = entries_r.add_resource("{entry_id}")
+        entry_r.add_method("GET", entries_int,
+            authorizer=authorizer,
+            authorization_type=apigw.AuthorizationType.COGNITO,
+        )
+
         # /photos/upload-url
         photos_r = api.root.add_resource("photos")
         upload_url_r = photos_r.add_resource("upload-url")
