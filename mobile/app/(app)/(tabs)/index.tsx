@@ -10,6 +10,7 @@ import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
 import { entries } from '@/data/mock-data';
+import { useProject } from '@/context/project-context';
 
 const FAB_SIZE = 56;
 
@@ -61,6 +62,7 @@ function groupEntriesByDate(entriesList: typeof entries): GroupedEntries {
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { activeProject } = useProject();
   const tabBarHeight = 60 + insets.bottom;
   const fabBottom = tabBarHeight + spacing[4];
   const grouped = groupEntriesByDate(entries);
@@ -68,7 +70,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.root}>
       <ScreenHeader
-        projectName="Edifício Residencial Parque das Flores"
+        projectName={activeProject?.name}
         onProjectPress={() => router.push('/(app)/(tabs)/projects')}
       />
 
