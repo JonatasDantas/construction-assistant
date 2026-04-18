@@ -68,7 +68,6 @@ class ConstructionAssistantStack(Stack):
             "USER_POOL_ID": user_pool.user_pool_id,
             "USER_POOL_CLIENT_ID": user_pool_client.user_pool_client_id,
         }
-
         _ssm_param_name = "/construction-assistant/openai-api-key"
 
         voice_submit_env = {
@@ -105,13 +104,15 @@ class ConstructionAssistantStack(Stack):
         )
         # Timeout must match queue visibility_timeout to prevent re-delivery during processing
         voice_process_fn = make_lambda("VoiceProcessFn", "voice.process_handler.handler", timeout=Duration.seconds(300))
+        reports_fn = make_lambda("ReportsFn", "reports.handler.handler", memory_size=512)
 
         # --- Permissions ---
-        for fn in [projects_fn, entries_fn, photos_fn, voice_submit_fn, voice_process_fn]:
+        for fn in [projects_fn, entries_fn, photos_fn, voice_submit_fn, voice_process_fn, reports_fn]:
             table.grant_read_write_data(fn)
 
         bucket.grant_put(photos_fn)
         bucket.grant_put(voice_submit_fn)
+        bucket.grant_read_write(reports_fn)
         voice_queue.grant_send_messages(voice_submit_fn)
         voice_submit_fn.add_to_role_policy(iam.PolicyStatement(
             actions=["ssm:GetParameter"],
@@ -197,6 +198,14 @@ class ConstructionAssistantStack(Stack):
         voice_r = api.root.add_resource("voice")
         submit_r = voice_r.add_resource("submit")
         submit_r.add_method("POST", voice_submit_int,
+            authorizer=authorizer,
+            authorization_type=apigw.AuthorizationType.COGNITO,
+        )
+
+        # /reports
+        reports_int = apigw.LambdaIntegration(reports_fn)
+        reports_r = api.root.add_resource("reports")
+        reports_r.add_method("POST", reports_int,
             authorizer=authorizer,
             authorization_type=apigw.AuthorizationType.COGNITO,
         )
