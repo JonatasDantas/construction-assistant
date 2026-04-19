@@ -310,7 +310,17 @@ export default function VoiceInputScreen() {
             <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonPrimary]}
               activeOpacity={0.8}
-              onPress={() => router.push('/(app)/add-photos')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/review-entry',
+                  params: {
+                    serviceType: structured?.service ?? '',
+                    teamSize: structured?.teamSize ?? '',
+                    description: transcription,
+                    formalDescription: structured?.description ?? '',
+                  },
+                })
+              }
             >
               <Check size={16} color={colors.textInverse} />
               <AppText size="base" weight="medium" color="inverse">Confirmar</AppText>
