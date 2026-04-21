@@ -1,4 +1,4 @@
-import { View, ScrollView, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, ScrollView, Image, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mic, Camera, FileText, Calendar, Sparkles, Users, Clock, Plus } from 'lucide-react-native';
@@ -9,8 +9,9 @@ import { StatsCard } from '@/components/stats-card';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
-import { entries } from '@/data/mock-data';
 import { useProject } from '@/context/project-context';
+import { Entry } from '@/utils/api';
+import { useEntries } from '@/hooks/use-entries';
 
 const FAB_SIZE = 56;
 
@@ -45,10 +46,10 @@ function formatDateLabel(dateStr: string): string {
   });
 }
 
-type GroupedEntries = { label: string; items: typeof entries }[];
+type GroupedEntries = { label: string; items: Entry[] }[];
 
-function groupEntriesByDate(entriesList: typeof entries): GroupedEntries {
-  const map: Record<string, typeof entries> = {};
+function groupEntriesByDate(entriesList: Entry[]): GroupedEntries {
+  const map: Record<string, Entry[]> = {};
   for (const entry of entriesList) {
     if (!map[entry.date]) map[entry.date] = [];
     map[entry.date].push(entry);
@@ -63,16 +64,52 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { activeProject } = useProject();
+  const { entries, loading, error, refetch } = useEntries(activeProject?.id ?? null);
+
   const tabBarHeight = 60 + insets.bottom;
   const fabBottom = tabBarHeight + spacing[4];
+  const totalPeople = entries.reduce((sum, e) => sum + e.teamSize, 0);
   const grouped = groupEntriesByDate(entries);
+
+  const header = (
+    <ScreenHeader
+      projectName={activeProject?.name}
+      onProjectPress={() => router.push('/(app)/(tabs)/projects')}
+    />
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centered}>
+          <AppText color="secondary" style={styles.errorText}>
+            {error}
+          </AppText>
+          <TouchableOpacity onPress={refetch} style={styles.retryButton} activeOpacity={0.7}>
+            <AppText weight="medium" style={styles.retryText}>
+              Tentar novamente
+            </AppText>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
-      <ScreenHeader
-        projectName={activeProject?.name}
-        onProjectPress={() => router.push('/(app)/(tabs)/projects')}
-      />
+      {header}
 
       <ScrollView
         style={styles.scroll}
@@ -110,55 +147,65 @@ export default function HomeScreen() {
         </View>
 
         {/* Stats */}
-        <StatsCard records={12} hours="48h" people={32} />
+        <StatsCard records={entries.length} hours="–" people={totalPeople} />
 
         {/* Timeline */}
-        {grouped.map(({ label, items }) => (
-          <View key={label} style={styles.dateGroup}>
-            <AppText size="sm" weight="medium" color="secondary">
-              {label}
+        {entries.length === 0 ? (
+          <View style={styles.emptyState}>
+            <AppText color="secondary" style={styles.emptyText}>
+              Nenhum registro encontrado
             </AppText>
-            <View style={styles.entryList}>
-              {items.map((entry) => (
-                <Card key={entry.id} shadow="sm" radius="xl">
-                  <Image
-                    source={{ uri: entry.photo }}
-                    style={styles.entryImage}
-                    resizeMode="cover"
-                    alt={entry.description}
-                  />
-                  <View style={styles.entryContent}>
-                    <View style={styles.pillRow}>
-                      <View style={styles.servicePill}>
-                        <AppText size="sm" weight="medium" style={styles.servicePillText}>
-                          {entry.service}
-                        </AppText>
-                      </View>
-                      <View style={styles.categoryPill}>
-                        <AppText size="xs" color="secondary">
-                          {entry.category}
-                        </AppText>
-                      </View>
-                    </View>
-                    <AppText size="sm" style={styles.entryDesc}>
-                      {entry.description}
-                    </AppText>
-                    <View style={styles.metaRow}>
-                      <View style={styles.metaItem}>
-                        <Users size={14} color={colors.textMuted} />
-                        <AppText size="xs" color="secondary">{entry.teamSize} pessoas</AppText>
-                      </View>
-                      <View style={styles.metaItem}>
-                        <Clock size={14} color={colors.textMuted} />
-                        <AppText size="xs" color="secondary">{entry.duration}</AppText>
-                      </View>
-                    </View>
-                  </View>
-                </Card>
-              ))}
-            </View>
           </View>
-        ))}
+        ) : (
+          grouped.map(({ label, items }) => (
+            <View key={label} style={styles.dateGroup}>
+              <AppText size="sm" weight="medium" color="secondary">
+                {label}
+              </AppText>
+              <View style={styles.entryList}>
+                {items.map((entry) => (
+                  <Card key={entry.id} shadow="sm" radius="xl">
+                    <Image
+                      source={{ uri: entry.photo }}
+                      style={styles.entryImage}
+                      resizeMode="cover"
+                      alt={entry.description}
+                    />
+                    <View style={styles.entryContent}>
+                      <View style={styles.pillRow}>
+                        <View style={styles.servicePill}>
+                          <AppText size="sm" weight="medium" style={styles.servicePillText}>
+                            {entry.service}
+                          </AppText>
+                        </View>
+                        <View style={styles.categoryPill}>
+                          <AppText size="xs" color="secondary">
+                            {entry.category}
+                          </AppText>
+                        </View>
+                      </View>
+                      <AppText size="sm" style={styles.entryDesc}>
+                        {entry.description}
+                      </AppText>
+                      <View style={styles.metaRow}>
+                        <View style={styles.metaItem}>
+                          <Users size={14} color={colors.textMuted} />
+                          <AppText size="xs" color="secondary">{entry.teamSize} pessoas</AppText>
+                        </View>
+                        {entry.duration ? (
+                          <View style={styles.metaItem}>
+                            <Clock size={14} color={colors.textMuted} />
+                            <AppText size="xs" color="secondary">{entry.duration}</AppText>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                  </Card>
+                ))}
+              </View>
+            </View>
+          ))
+        )}
       </ScrollView>
 
       {/* FAB */}
@@ -183,6 +230,33 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing[4],
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing[6],
+  },
+  errorText: {
+    textAlign: 'center',
+    marginBottom: spacing[4],
+  },
+  retryButton: {
+    paddingHorizontal: spacing[6],
+    paddingVertical: spacing[3],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  retryText: {
+    color: colors.primary,
+  },
+  emptyState: {
+    paddingVertical: spacing[12],
+    alignItems: 'center',
+  },
+  emptyText: {
+    textAlign: 'center',
   },
   // Quick Actions
   quickActions: {
