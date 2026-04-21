@@ -103,7 +103,13 @@ class ConstructionAssistantStack(Stack):
             extra_env={"SSM_PARAMETER_NAME": _ssm_param_name},
         )
         # Timeout must match queue visibility_timeout to prevent re-delivery during processing
-        voice_process_fn = make_lambda("VoiceProcessFn", "voice.process_handler.handler", timeout=Duration.seconds(300))
+        voice_process_fn = make_lambda(
+            "VoiceProcessFn",
+            "voice.process_handler.handler",
+            timeout=Duration.seconds(300),
+            memory_size=512,
+            extra_env={"SSM_PARAMETER_NAME": _ssm_param_name},
+        )
         reports_fn = make_lambda("ReportsFn", "reports.handler.handler", memory_size=512)
 
         # --- Permissions ---
@@ -112,14 +118,16 @@ class ConstructionAssistantStack(Stack):
 
         bucket.grant_put(photos_fn)
         bucket.grant_put(voice_submit_fn)
+        bucket.grant_read(voice_process_fn)
         bucket.grant_read_write(reports_fn)
         voice_queue.grant_send_messages(voice_submit_fn)
-        voice_submit_fn.add_to_role_policy(iam.PolicyStatement(
-            actions=["ssm:GetParameter"],
-            resources=[
-                f"arn:aws:ssm:*:*:parameter{_ssm_param_name}",
-            ],
-        ))
+        for fn in [voice_submit_fn, voice_process_fn]:
+            fn.add_to_role_policy(iam.PolicyStatement(
+                actions=["ssm:GetParameter"],
+                resources=[
+                    f"arn:aws:ssm:*:*:parameter{_ssm_param_name}",
+                ],
+            ))
         voice_process_fn.add_event_source(
             event_sources.SqsEventSource(voice_queue, batch_size=1)
         )
