@@ -6,6 +6,7 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="voice-input" />
       <Stack.Screen name="add-photos" />
+      <Stack.Screen name="review-entry" />
     </Stack>
   );
 }

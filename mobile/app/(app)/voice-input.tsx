@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { View, ScrollView, TouchableOpacity, Animated, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Mic, Sparkles, Check, Edit2 } from 'lucide-react-native';
+import { Mic, Sparkles, Check } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { AppText } from '@/components/app-text';
 import { ScreenHeader } from '@/components/screen-header';
@@ -298,19 +298,20 @@ export default function VoiceInputScreen() {
 
           {/* Fixed bottom action bar */}
           <View style={styles.actionBar}>
-            {/* TODO: wire up edit flow when implemented */}
-            <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonSecondary]}
-              activeOpacity={0.8}
-              onPress={() => {}}
-            >
-              <Edit2 size={16} color={colors.textPrimary} />
-              <AppText size="base" weight="medium">Editar</AppText>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonPrimary]}
               activeOpacity={0.8}
-              onPress={() => router.push('/(app)/add-photos')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/review-entry',
+                  params: {
+                    serviceType: structured?.service ?? '',
+                    teamSize: structured?.teamSize ?? '',
+                    description: transcription,
+                    formalDescription: structured?.description ?? '',
+                  },
+                })
+              }
             >
               <Check size={16} color={colors.textInverse} />
               <AppText size="base" weight="medium" color="inverse">Confirmar</AppText>
