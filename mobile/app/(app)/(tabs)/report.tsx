@@ -1,18 +1,26 @@
-import { View, ScrollView, Image, TouchableOpacity, StyleSheet } from 'react-native';
-import { Share2, FileText, Download } from 'lucide-react-native';
+import { useState } from 'react';
+import {
+  View,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  Share,
+} from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { Share2, FileText, Download, ExternalLink } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AppText } from '@/components/app-text';
 import { ScreenHeader } from '@/components/screen-header';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
-import { entries, projects } from '@/data/mock-data';
+import { useProject } from '@/context/project-context';
+import { generateReport } from '@/utils/reports-api';
 
-const TAB_BAR_HEIGHT = 60; // matches tabBarStyle.height in (tabs)/_layout.tsx
+const TAB_BAR_HEIGHT = 60;
 
-function getLocalDateStr(): string {
-  return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
-}
+type Status = 'idle' | 'generating' | 'preview';
 
 function getTodayLabel(): string {
   return new Date().toLocaleDateString('pt-BR', {
@@ -23,9 +31,45 @@ function getTodayLabel(): string {
 }
 
 export default function ReportScreen() {
-  const todayStr = getLocalDateStr();
+  const { activeProject } = useProject();
   const todayLabel = getTodayLabel();
-  const todayEntries = entries.filter((e) => e.date === todayStr);
+
+  const [status, setStatus] = useState<Status>('idle');
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  async function handleGeneratePdf() {
+    if (!activeProject) {
+      Alert.alert('Nenhum projeto ativo', 'Selecione um projeto antes de gerar o relatório.');
+      return;
+    }
+    setStatus('generating');
+    try {
+      const result = await generateReport(activeProject.id);
+      setPdfUrl(result.pdfUrl);
+      setStatus('preview');
+    } catch (err) {
+      setStatus('idle');
+      Alert.alert(
+        'Erro ao gerar relatório',
+        err instanceof Error ? err.message : 'Tente novamente.',
+      );
+    }
+  }
+
+  async function handleOpenPdf() {
+    if (pdfUrl) {
+      await WebBrowser.openBrowserAsync(pdfUrl);
+    }
+  }
+
+  async function handleShare() {
+    if (!pdfUrl) return;
+    try {
+      await Share.share({ url: pdfUrl, title: 'Relatório de Obras' });
+    } catch {
+      // user dismissed share sheet — no-op
+    }
+  }
 
   return (
     <View style={styles.root}>
@@ -33,21 +77,15 @@ export default function ReportScreen() {
         title="Relatório Diário"
         subtitle={todayLabel}
         action={
-          // TODO: wire up share sheet when implemented
-          <TouchableOpacity hitSlop={8} onPress={() => {}}>
-            <Share2 size={20} color={colors.textSecondary} />
+          <TouchableOpacity hitSlop={8} onPress={handleShare} disabled={!pdfUrl}>
+            <Share2 size={20} color={pdfUrl ? colors.textSecondary : colors.textMuted} />
           </TouchableOpacity>
         }
       />
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.content}>
         {/* Document Card */}
         <View style={styles.documentCard}>
-          {/* Gradient Header */}
           <LinearGradient
             colors={[colors.gradientStart, colors.gradientEnd]}
             start={{ x: 0, y: 0 }}
@@ -63,7 +101,7 @@ export default function ReportScreen() {
                   Diário de Obras
                 </AppText>
                 <AppText size="sm" color="inverse" style={styles.docProject}>
-                  {projects[0].name}
+                  {activeProject?.name ?? '—'}
                 </AppText>
               </View>
             </View>
@@ -72,63 +110,33 @@ export default function ReportScreen() {
             </AppText>
           </LinearGradient>
 
-          {/* Document Content */}
           <View style={styles.docContent}>
-            {todayEntries.length === 0 && (
-              <AppText size="sm" color="secondary" style={styles.emptyState}>
-                Nenhum registro encontrado para hoje.
-              </AppText>
-            )}
-            {todayEntries.map((entry, index) => (
-              <View key={entry.id}>
-                {index > 0 && <View style={styles.entrySeparator} />}
-
-                {/* Entry Header: numbered circle + service + category */}
-                <View style={styles.entryHeader}>
-                  <View style={styles.entryNumber}>
-                    <AppText size="sm" weight="medium" style={styles.entryNumberText}>
-                      {index + 1}
-                    </AppText>
-                  </View>
-                  <View style={styles.entryMeta}>
-                    <AppText size="base" weight="semibold">{entry.service}</AppText>
-                    <AppText size="sm" color="secondary">{entry.category}</AppText>
-                  </View>
-                </View>
-
-                {/* Photo */}
-                <Image
-                  source={{ uri: entry.photo }}
-                  style={styles.entryPhoto}
-                  resizeMode="cover"
-                  alt={entry.service}
-                />
-
-                {/* Description */}
-                <View style={styles.descSection}>
-                  <AppText size="sm" weight="medium" style={styles.descLabel}>
-                    Descrição:
-                  </AppText>
-                  <AppText size="sm" style={styles.descText}>
-                    {entry.description}
-                  </AppText>
-                </View>
-
-                {/* Details: 2-column grid */}
-                <View style={styles.detailsRow}>
-                  <View style={styles.detailBox}>
-                    <AppText size="xs" color="secondary">Equipe</AppText>
-                    <AppText size="base" weight="medium">{entry.teamSize} pessoas</AppText>
-                  </View>
-                  <View style={styles.detailBox}>
-                    <AppText size="xs" color="secondary">Duração</AppText>
-                    <AppText size="base" weight="medium">{entry.duration}</AppText>
-                  </View>
-                </View>
+            {status === 'generating' ? (
+              <View style={styles.statusBox}>
+                <ActivityIndicator color={colors.primary} size="large" />
+                <AppText size="sm" color="secondary" style={styles.statusText}>
+                  Gerando relatório...
+                </AppText>
               </View>
-            ))}
+            ) : status === 'preview' ? (
+              <View style={styles.statusBox}>
+                <AppText size="base" weight="semibold" style={styles.successText}>
+                  Relatório gerado com sucesso!
+                </AppText>
+                <AppText size="sm" color="secondary" style={styles.statusText}>
+                  Use os botões abaixo para abrir ou compartilhar o PDF.
+                </AppText>
+              </View>
+            ) : (
+              <View style={styles.statusBox}>
+                <AppText size="sm" color="secondary" style={styles.statusText}>
+                  {activeProject
+                    ? 'Toque em "Gerar PDF" para criar o relatório do projeto.'
+                    : 'Selecione um projeto na aba Projetos para gerar o relatório.'}
+                </AppText>
+              </View>
+            )}
 
-            {/* Footer */}
             <View style={styles.docFooter}>
               <AppText size="sm" color="secondary" style={styles.footerText}>
                 Relatório gerado automaticamente pelo Diário de Obras Inteligente
@@ -139,26 +147,56 @@ export default function ReportScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionsRow}>
-          {/* TODO: wire up share sheet when implemented */}
           <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonOutline]}
+            style={[
+              styles.actionButton,
+              styles.actionButtonOutline,
+              !pdfUrl && styles.actionButtonDisabled,
+            ]}
             activeOpacity={0.8}
-            onPress={() => {}}
+            onPress={handleShare}
+            disabled={!pdfUrl}
           >
-            <Share2 size={16} color={colors.textPrimary} />
-            <AppText size="base" weight="medium">Compartilhar</AppText>
+            <Share2 size={16} color={pdfUrl ? colors.textPrimary : colors.textMuted} />
+            <AppText size="base" weight="medium" color={pdfUrl ? 'primary' : 'muted'}>
+              Compartilhar
+            </AppText>
           </TouchableOpacity>
-          {/* TODO: wire up PDF generation when implemented */}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonPrimary]}
-            activeOpacity={0.8}
-            onPress={() => {}}
-          >
-            <Download size={16} color={colors.textInverse} />
-            <AppText size="base" weight="medium" color="inverse">Gerar PDF</AppText>
-          </TouchableOpacity>
+
+          {status === 'preview' ? (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonPrimary]}
+              activeOpacity={0.8}
+              onPress={handleOpenPdf}
+            >
+              <ExternalLink size={16} color={colors.textInverse} />
+              <AppText size="base" weight="medium" color="inverse">
+                Abrir PDF
+              </AppText>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.actionButtonPrimary,
+                (status === 'generating' || !activeProject) && styles.actionButtonDisabled,
+              ]}
+              activeOpacity={0.8}
+              onPress={handleGeneratePdf}
+              disabled={status === 'generating' || !activeProject}
+            >
+              {status === 'generating' ? (
+                <ActivityIndicator size="small" color={colors.textInverse} />
+              ) : (
+                <Download size={16} color={colors.textInverse} />
+              )}
+              <AppText size="base" weight="medium" color="inverse">
+                Gerar PDF
+              </AppText>
+            </TouchableOpacity>
+          )}
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -168,15 +206,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  scroll: {
-    flex: 1,
-  },
   content: {
+    flex: 1,
     padding: spacing[4],
     paddingBottom: TAB_BAR_HEIGHT + spacing[4],
     gap: spacing[6],
   },
-  // Document card — plain View (not Card component) to allow overflow:hidden with gradient
   documentCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
@@ -185,7 +220,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...(shadows.sm as object),
   },
-  // Gradient header
   docHeader: {
     padding: spacing[6],
   },
@@ -215,83 +249,32 @@ const styles = StyleSheet.create({
   docDate: {
     opacity: 0.8,
   },
-  // Document content
   docContent: {
     padding: spacing[6],
+    gap: spacing[4],
   },
-  // Separator between entries (shown before every entry except the first)
-  entrySeparator: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing[8],
-  },
-  // Entry header row
-  entryHeader: {
-    flexDirection: 'row',
+  statusBox: {
     alignItems: 'center',
-    gap: spacing[2],
-    marginBottom: spacing[4],
-  },
-  entryNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  entryNumberText: {
-    color: colors.primary,
-  },
-  entryMeta: {
-    flex: 1,
-  },
-  // Entry photo — fixed height (matches web h-48 = 192px)
-  entryPhoto: {
-    width: '100%',
-    height: 192,
-    borderRadius: radius.md,
-    marginBottom: spacing[4],
-  },
-  // Description section
-  descSection: {
-    gap: spacing[2],
-    marginBottom: spacing[4],
-  },
-  descLabel: {
-    color: colors.textPrimary,
-  },
-  descText: {
-    color: colors.textSecondary,
-    lineHeight: 22,
-  },
-  // Details 2-column grid
-  detailsRow: {
-    flexDirection: 'row',
+    paddingVertical: spacing[6],
     gap: spacing[3],
   },
-  detailBox: {
-    flex: 1,
-    backgroundColor: colors.borderLight,
-    borderRadius: radius.md,
-    padding: spacing[3],
-    gap: spacing[1],
+  statusText: {
+    textAlign: 'center',
+    maxWidth: 280,
   },
-  // Document footer
+  successText: {
+    color: colors.success,
+    textAlign: 'center',
+  },
   docFooter: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: spacing[6],
-    marginTop: spacing[8],
+    paddingTop: spacing[4],
+    marginTop: spacing[2],
   },
   footerText: {
     textAlign: 'center',
   },
-  emptyState: {
-    textAlign: 'center',
-    paddingVertical: spacing[8],
-  },
-  // Action buttons row
   actionsRow: {
     flexDirection: 'row',
     gap: spacing[3],
@@ -312,5 +295,8 @@ const styles = StyleSheet.create({
   },
   actionButtonPrimary: {
     backgroundColor: colors.primary,
+  },
+  actionButtonDisabled: {
+    opacity: 0.4,
   },
 });
