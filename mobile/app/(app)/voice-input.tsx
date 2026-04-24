@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { View, ScrollView, TouchableOpacity, Animated, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Mic, Sparkles, Check, Edit2 } from 'lucide-react-native';
+import { Mic, Sparkles, Check } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { AppText } from '@/components/app-text';
 import { ScreenHeader } from '@/components/screen-header';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
+import { submitVoiceRecording } from '@/utils/voice-api';
 
 // --- Types ---
 
@@ -19,24 +20,7 @@ interface StructuredEntry {
   teamSize: string;
   duration: string;
   description: string;
-}
-
-// --- Mock API (replace with real API calls) ---
-
-async function mockTranscribeAudio(_uri: string | null): Promise<string> {
-  await new Promise<void>((r) => setTimeout(r, 800));
-  return 'Hoje fizemos a concretagem da laje do terceiro pavimento. Foram 8 pessoas trabalhando durante 4 horas. Tudo correu bem, sem intercorrências.';
-}
-
-async function mockSummarizeText(_text: string): Promise<StructuredEntry> {
-  await new Promise<void>((r) => setTimeout(r, 700));
-  return {
-    service: 'Concretagem',
-    category: 'Estrutura',
-    teamSize: '8 pessoas',
-    duration: '4 horas',
-    description: 'Concretagem da laje do 3º pavimento finalizada conforme cronograma. Equipe de 8 funcionários trabalhou durante 4 horas sem intercorrências registradas.',
-  };
+  formalDescription: string;
 }
 
 // --- Screen ---
@@ -164,17 +148,31 @@ export default function VoiceInputScreen() {
       await recording?.stopAndUnloadAsync();
       uri = recording?.getURI() ?? null;
     } catch {
-      // Continue with mock even if recording cleanup fails
+      // Continue processing even if recording cleanup fails
     }
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+
+    if (!uri) {
+      Alert.alert('Erro', 'Não foi possível acessar o arquivo de áudio. Tente novamente.');
+      setStage('idle');
+      return;
+    }
+
     try {
-      const text = await mockTranscribeAudio(uri);
-      const entry = await mockSummarizeText(text);
-      setTranscription(text);
-      setStructured(entry);
+      const result = await submitVoiceRecording(uri);
+      setTranscription(result.description);
+      setStructured({
+        service: result.serviceType,
+        category: result.serviceType,
+        teamSize: `${result.teamSize} pessoas`,
+        duration: '',
+        description: result.formalDescription,
+        formalDescription: result.formalDescription,
+      });
       setStage('result');
-    } catch {
-      Alert.alert('Erro', 'Não foi possível processar o áudio. Tente novamente.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      Alert.alert('Erro', `Não foi possível processar o áudio: ${message}`);
       setStage('idle');
     }
   };
@@ -284,7 +282,7 @@ export default function VoiceInputScreen() {
                 </View>
                 <View style={[styles.fieldBox, styles.fieldBoxHalf]}>
                   <AppText size="xs" color="secondary">Duração</AppText>
-                  <AppText size="base" weight="medium">{structured?.duration}</AppText>
+                  <AppText size="base" weight="medium">{structured?.duration || '—'}</AppText>
                 </View>
               </View>
               <View style={styles.fieldBox}>
@@ -298,19 +296,20 @@ export default function VoiceInputScreen() {
 
           {/* Fixed bottom action bar */}
           <View style={styles.actionBar}>
-            {/* TODO: wire up edit flow when implemented */}
-            <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonSecondary]}
-              activeOpacity={0.8}
-              onPress={() => {}}
-            >
-              <Edit2 size={16} color={colors.textPrimary} />
-              <AppText size="base" weight="medium">Editar</AppText>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonPrimary]}
               activeOpacity={0.8}
-              onPress={() => router.push('/(app)/add-photos')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/review-entry',
+                  params: {
+                    serviceType: structured?.service ?? '',
+                    teamSize: structured?.teamSize ?? '',
+                    description: transcription,
+                    formalDescription: structured?.formalDescription ?? '',
+                  },
+                })
+              }
             >
               <Check size={16} color={colors.textInverse} />
               <AppText size="base" weight="medium" color="inverse">Confirmar</AppText>
@@ -455,9 +454,6 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     paddingVertical: spacing[3],
     borderRadius: radius.xl,
-  },
-  actionButtonSecondary: {
-    backgroundColor: colors.borderLight,
   },
   actionButtonPrimary: {
     backgroundColor: colors.primary,
