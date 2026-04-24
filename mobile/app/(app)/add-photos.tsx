@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { View, ScrollView, TouchableOpacity, Image, Dimensions, StyleSheet, Alert } from 'react-native';
+import { useState, useRef, useCallback } from 'react';
+import { View, ScrollView, TouchableOpacity, Image, Dimensions, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Camera, Images, X, Check } from 'lucide-react-native';
+import { Camera, Images, X, Check, AlertCircle } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { AppText } from '@/components/app-text';
 import { ScreenHeader } from '@/components/screen-header';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
+import { useProject } from '@/context/project-context';
+import { requestPresignedUrl, uploadToS3 } from '@/utils/photos-api';
 
 const MAX_PHOTOS = 10;
 const GRID_COLUMNS = 3;
@@ -16,11 +18,77 @@ const GRID_GAP = spacing[2];
 const THUMBNAIL_SIZE =
   (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
 
+type PhotoStatus = 'uploading' | 'done' | 'error';
+
+interface PhotoItem {
+  id: string;
+  uri: string;
+  filename: string;
+  contentType: string;
+  status: PhotoStatus;
+  key?: string;
+}
+
+function uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+function mimeFromUri(uri: string): string {
+  const ext = uri.split('?')[0].split('.').pop()?.toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
 export default function AddPhotosScreen() {
   const router = useRouter();
-  const [photos, setPhotos] = useState<string[]>([]);
+  const { activeProject } = useProject();
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // logId is stable for the lifetime of this screen session
+  const logIdRef = useRef<string>(uuid());
 
+  const isUploading = photos.some((p) => p.status === 'uploading');
   const atMax = photos.length >= MAX_PHOTOS;
+
+  const startUpload = useCallback(async (photo: PhotoItem) => {
+    if (!activeProject) {
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === photo.id ? { ...p, status: 'error' } : p)),
+      );
+      return;
+    }
+
+    try {
+      const { uploadUrl, key } = await requestPresignedUrl(
+        activeProject.id,
+        logIdRef.current,
+        photo.filename,
+        photo.contentType,
+      );
+      await uploadToS3(uploadUrl, photo.uri, photo.contentType);
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === photo.id ? { ...p, status: 'done', key } : p)),
+      );
+    } catch {
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === photo.id ? { ...p, status: 'error' } : p)),
+      );
+    }
+  }, [activeProject]);
+
+  const addPhotos = useCallback((uris: string[]) => {
+    const newItems: PhotoItem[] = uris.map((uri) => {
+      const filename = `${uuid()}.jpg`;
+      const contentType = mimeFromUri(uri);
+      return { id: uuid(), uri, filename, contentType, status: 'uploading' };
+    });
+    setPhotos((prev) => [...prev, ...newItems].slice(0, MAX_PHOTOS));
+    newItems.forEach((item) => startUpload(item));
+  }, [startUpload]);
 
   const handleCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -36,7 +104,7 @@ export default function AddPhotosScreen() {
       quality: 0.8,
     });
     if (!result.canceled) {
-      setPhotos((prev) => [...prev, result.assets[0].uri].slice(0, MAX_PHOTOS));
+      addPhotos([result.assets[0].uri]);
     }
   };
 
@@ -56,18 +124,17 @@ export default function AddPhotosScreen() {
       selectionLimit: MAX_PHOTOS - photos.length,
     });
     if (!result.canceled) {
-      setPhotos((prev) =>
-        [...prev, ...result.assets.map((a) => a.uri)].slice(0, MAX_PHOTOS),
-      );
+      addPhotos(result.assets.map((a) => a.uri));
     }
   };
 
-  const handleRemove = (index: number) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  const handleRemove = (id: string) => {
+    setPhotos((prev) => prev.filter((p) => p.id !== id));
   };
 
   const handleFinish = () => {
-    Alert.alert('Registro criado com sucesso!', '', [
+    const s3Keys = photos.filter((p) => p.status === 'done').map((p) => p.key as string);
+    Alert.alert('Registro criado com sucesso!', `${s3Keys.length} foto(s) enviada(s).`, [
       { text: 'OK', onPress: () => router.replace('/(app)/(tabs)') },
     ]);
   };
@@ -107,16 +174,34 @@ export default function AddPhotosScreen() {
           </View>
         ) : (
           <View style={styles.grid}>
-            {photos.map((uri, index) => (
-              <View key={uri} style={styles.thumbnailContainer}>
+            {photos.map((photo) => (
+              <View key={photo.id} style={styles.thumbnailContainer}>
                 <Image
-                  source={{ uri }}
+                  source={{ uri: photo.uri }}
                   style={styles.thumbnailImage}
                   resizeMode="cover"
                 />
+
+                {/* Upload status overlay */}
+                {photo.status === 'uploading' && (
+                  <View style={styles.statusOverlay}>
+                    <ActivityIndicator size="small" color={colors.textInverse} />
+                  </View>
+                )}
+                {photo.status === 'error' && (
+                  <View style={[styles.statusOverlay, styles.statusOverlayError]}>
+                    <AlertCircle size={18} color={colors.textInverse} />
+                  </View>
+                )}
+                {photo.status === 'done' && (
+                  <View style={[styles.statusBadge, styles.statusBadgeDone]}>
+                    <Check size={10} color={colors.textInverse} />
+                  </View>
+                )}
+
                 <TouchableOpacity
                   style={styles.removeButton}
-                  onPress={() => handleRemove(index)}
+                  onPress={() => handleRemove(photo.id)}
                   hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                 >
                   <X size={12} color={colors.textInverse} />
@@ -160,13 +245,22 @@ export default function AddPhotosScreen() {
         </TouchableOpacity>
         {photos.length > 0 && (
           <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonPrimary]}
+            style={[
+              styles.actionButton,
+              styles.actionButtonPrimary,
+              isUploading && styles.actionButtonDisabled,
+            ]}
             onPress={handleFinish}
             activeOpacity={0.8}
+            disabled={isUploading}
           >
-            <Check size={16} color={colors.textInverse} />
+            {isUploading ? (
+              <ActivityIndicator size="small" color={colors.textInverse} />
+            ) : (
+              <Check size={16} color={colors.textInverse} />
+            )}
             <AppText size="base" weight="medium" color="inverse">
-              Concluir
+              {isUploading ? 'Enviando...' : 'Concluir'}
             </AppText>
           </TouchableOpacity>
         )}
@@ -222,6 +316,29 @@ const styles = StyleSheet.create({
     width: THUMBNAIL_SIZE,
     height: THUMBNAIL_SIZE,
     borderRadius: radius.md,
+  },
+  statusOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusOverlayError: {
+    backgroundColor: 'rgba(239,68,68,0.7)',
+  },
+  statusBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBadgeDone: {
+    backgroundColor: colors.success,
   },
   removeButton: {
     position: 'absolute',
