@@ -8,36 +8,11 @@ import { ScreenHeader } from '@/components/screen-header';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
+import { processVoice, type VoiceProcessResult } from '@/services/voice-api';
 
 // --- Types ---
 
 type Stage = 'idle' | 'recording' | 'processing' | 'result';
-
-interface StructuredEntry {
-  service: string;
-  category: string;
-  teamSize: string;
-  duration: string;
-  description: string;
-}
-
-// --- Mock API (replace with real API calls) ---
-
-async function mockTranscribeAudio(_uri: string | null): Promise<string> {
-  await new Promise<void>((r) => setTimeout(r, 800));
-  return 'Hoje fizemos a concretagem da laje do terceiro pavimento. Foram 8 pessoas trabalhando durante 4 horas. Tudo correu bem, sem intercorrências.';
-}
-
-async function mockSummarizeText(_text: string): Promise<StructuredEntry> {
-  await new Promise<void>((r) => setTimeout(r, 700));
-  return {
-    service: 'Concretagem',
-    category: 'Estrutura',
-    teamSize: '8 pessoas',
-    duration: '4 horas',
-    description: 'Concretagem da laje do 3º pavimento finalizada conforme cronograma. Equipe de 8 funcionários trabalhou durante 4 horas sem intercorrências registradas.',
-  };
-}
 
 // --- Screen ---
 
@@ -48,8 +23,7 @@ const MIC_SIZE = 96;
 export default function VoiceInputScreen() {
   const router = useRouter();
   const [stage, setStage] = useState<Stage>('idle');
-  const [transcription, setTranscription] = useState('');
-  const [structured, setStructured] = useState<StructuredEntry | null>(null);
+  const [result, setResult] = useState<VoiceProcessResult | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
 
   // Pulse ring animations (recording stage)
@@ -164,19 +138,35 @@ export default function VoiceInputScreen() {
       await recording?.stopAndUnloadAsync();
       uri = recording?.getURI() ?? null;
     } catch {
-      // Continue with mock even if recording cleanup fails
+      // Continue processing even if recording cleanup fails
     }
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+    if (!uri) {
+      Alert.alert('Erro', 'Não foi possível acessar o arquivo de áudio. Tente novamente.');
+      setStage('idle');
+      return;
+    }
     try {
-      const text = await mockTranscribeAudio(uri);
-      const entry = await mockSummarizeText(text);
-      setTranscription(text);
-      setStructured(entry);
+      const processed = await processVoice(uri);
+      setResult(processed);
       setStage('result');
     } catch {
       Alert.alert('Erro', 'Não foi possível processar o áudio. Tente novamente.');
       setStage('idle');
     }
+  };
+
+  const handleConfirm = () => {
+    if (!result) return;
+    router.push({
+      pathname: '/(app)/add-photos',
+      params: {
+        serviceType: result.serviceType,
+        teamSize: String(result.teamSize),
+        description: result.description,
+        formalDescription: result.formalDescription,
+      },
+    });
   };
 
   return (
@@ -259,38 +249,28 @@ export default function VoiceInputScreen() {
               <AppText size="xl" weight="semibold">Registro estruturado</AppText>
             </View>
 
-            {/* Transcription */}
-            <View style={styles.transcriptionBox}>
-              <AppText size="xs" color="secondary">Transcrição</AppText>
-              <AppText size="sm" style={styles.transcriptionText}>
-                {'"'}{transcription}{'"'}
-              </AppText>
-            </View>
-
             {/* Structured fields */}
             <View style={styles.fieldsContainer}>
               <View style={styles.fieldBox}>
                 <AppText size="xs" color="secondary">Serviço</AppText>
-                <AppText size="base" weight="medium">{structured?.service}</AppText>
+                <AppText size="base" weight="medium">{result?.serviceType}</AppText>
               </View>
               <View style={styles.fieldBox}>
-                <AppText size="xs" color="secondary">Categoria</AppText>
-                <AppText size="base" weight="medium">{structured?.category}</AppText>
+                <AppText size="xs" color="secondary">Equipe</AppText>
+                <AppText size="base" weight="medium">
+                  {result?.teamSize != null ? `${result.teamSize} pessoa${result.teamSize !== 1 ? 's' : ''}` : ''}
+                </AppText>
               </View>
-              <View style={styles.fieldRow}>
-                <View style={[styles.fieldBox, styles.fieldBoxHalf]}>
-                  <AppText size="xs" color="secondary">Equipe</AppText>
-                  <AppText size="base" weight="medium">{structured?.teamSize}</AppText>
-                </View>
-                <View style={[styles.fieldBox, styles.fieldBoxHalf]}>
-                  <AppText size="xs" color="secondary">Duração</AppText>
-                  <AppText size="base" weight="medium">{structured?.duration}</AppText>
-                </View>
+              <View style={styles.fieldBox}>
+                <AppText size="xs" color="secondary">Descrição</AppText>
+                <AppText size="sm" style={styles.descriptionText}>
+                  {result?.description}
+                </AppText>
               </View>
               <View style={styles.fieldBox}>
                 <AppText size="xs" color="secondary">Descrição Formal</AppText>
                 <AppText size="sm" style={styles.descriptionText}>
-                  {structured?.description}
+                  {result?.formalDescription}
                 </AppText>
               </View>
             </View>
@@ -310,7 +290,7 @@ export default function VoiceInputScreen() {
             <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonPrimary]}
               activeOpacity={0.8}
-              onPress={() => router.push('/(app)/add-photos')}
+              onPress={handleConfirm}
             >
               <Check size={16} color={colors.textInverse} />
               <AppText size="base" weight="medium" color="inverse">Confirmar</AppText>
@@ -404,17 +384,6 @@ const styles = StyleSheet.create({
   aiLabelText: {
     color: colors.primary,
   },
-  transcriptionBox: {
-    backgroundColor: colors.borderLight,
-    borderRadius: radius.xl,
-    padding: spacing[4],
-    gap: spacing[2],
-  },
-  transcriptionText: {
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-    lineHeight: 22,
-  },
   fieldsContainer: {
     gap: spacing[4],
   },
@@ -425,13 +394,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: spacing[4],
     gap: spacing[1],
-  },
-  fieldBoxHalf: {
-    flex: 1,
-  },
-  fieldRow: {
-    flexDirection: 'row',
-    gap: spacing[4],
   },
   descriptionText: {
     color: colors.textSecondary,
