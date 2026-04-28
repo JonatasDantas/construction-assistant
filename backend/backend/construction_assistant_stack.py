@@ -5,6 +5,7 @@ from aws_cdk import (
     aws_apigateway as apigw,
     aws_cognito as cognito,
     aws_dynamodb as dynamodb,
+    aws_iam as iam,
     aws_lambda as lambda_,
     aws_lambda_event_sources as event_sources,
     aws_s3 as s3,
@@ -67,31 +68,58 @@ class ConstructionAssistantStack(Stack):
             "USER_POOL_ID": user_pool.user_pool_id,
             "USER_POOL_CLIENT_ID": user_pool_client.user_pool_client_id,
         }
+        _ssm_param_name = "/construction-assistant/openai-api-key"
 
-        def make_lambda(id: str, handler_path: str, timeout: Duration = Duration.seconds(30)) -> lambda_.Function:
+        voice_submit_env = {
+            **common_env,
+            "SSM_PARAMETER_NAME": _ssm_param_name,
+        }
+
+        def make_lambda(
+            id: str,
+            handler_path: str,
+            timeout: Duration = Duration.seconds(30),
+            memory_size: int = 128,
+            extra_env: dict = None,
+        ) -> lambda_.Function:
             return lambda_.Function(
                 self, id,
                 runtime=lambda_.Runtime.PYTHON_3_11,
                 code=lambda_.Code.from_asset("lambdas"),
                 handler=handler_path,
-                environment=common_env,
+                environment={**common_env, **(extra_env or {})},
                 timeout=timeout,
+                memory_size=memory_size,
             )
 
         projects_fn = make_lambda("ProjectsFn", "projects.handler.handler")
         entries_fn = make_lambda("EntriesFn", "entries.handler.handler")
         photos_fn = make_lambda("PhotosFn", "photos.handler.handler")
-        voice_submit_fn = make_lambda("VoiceSubmitFn", "voice.submit_handler.handler")
+        voice_submit_fn = make_lambda(
+            "VoiceSubmitFn",
+            "voice.submit_handler.handler",
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            extra_env={"SSM_PARAMETER_NAME": _ssm_param_name},
+        )
         # Timeout must match queue visibility_timeout to prevent re-delivery during processing
         voice_process_fn = make_lambda("VoiceProcessFn", "voice.process_handler.handler", timeout=Duration.seconds(300))
+        reports_fn = make_lambda("ReportsFn", "reports.handler.handler", memory_size=512)
 
         # --- Permissions ---
-        for fn in [projects_fn, entries_fn, photos_fn, voice_submit_fn, voice_process_fn]:
+        for fn in [projects_fn, entries_fn, photos_fn, voice_submit_fn, voice_process_fn, reports_fn]:
             table.grant_read_write_data(fn)
 
         bucket.grant_put(photos_fn)
         bucket.grant_put(voice_submit_fn)
+        bucket.grant_read_write(reports_fn)
         voice_queue.grant_send_messages(voice_submit_fn)
+        voice_submit_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["ssm:GetParameter"],
+            resources=[
+                f"arn:aws:ssm:*:*:parameter{_ssm_param_name}",
+            ],
+        ))
         voice_process_fn.add_event_source(
             event_sources.SqsEventSource(voice_queue, batch_size=1)
         )
@@ -170,6 +198,14 @@ class ConstructionAssistantStack(Stack):
         voice_r = api.root.add_resource("voice")
         submit_r = voice_r.add_resource("submit")
         submit_r.add_method("POST", voice_submit_int,
+            authorizer=authorizer,
+            authorization_type=apigw.AuthorizationType.COGNITO,
+        )
+
+        # /reports
+        reports_int = apigw.LambdaIntegration(reports_fn)
+        reports_r = api.root.add_resource("reports")
+        reports_r.add_method("POST", reports_int,
             authorizer=authorizer,
             authorization_type=apigw.AuthorizationType.COGNITO,
         )
