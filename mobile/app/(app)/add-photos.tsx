@@ -1,13 +1,24 @@
-import { useState } from 'react';
-import { View, ScrollView, TouchableOpacity, Image, Dimensions, StyleSheet, Alert } from 'react-native';
+import { useState, useRef } from 'react';
+import {
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Dimensions,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { Camera, Images, X, Check } from 'lucide-react-native';
+import { Camera, Images, X, Check, AlertCircle } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { AppText } from '@/components/app-text';
 import { ScreenHeader } from '@/components/screen-header';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
+import { useProject } from '@/context/project-context';
+import { getPresignedUrl, uploadImageToS3 } from '@/utils/photos-api';
 
 const MAX_PHOTOS = 10;
 const GRID_COLUMNS = 3;
@@ -16,11 +27,50 @@ const GRID_GAP = spacing[2];
 const THUMBNAIL_SIZE =
   (SCREEN_WIDTH - spacing[4] * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
 
+type UploadStatus = 'uploading' | 'done' | 'error';
+
+interface PhotoItem {
+  uri: string;
+  filename: string;
+  contentType: string;
+  status: UploadStatus;
+  key?: string;
+  error?: string;
+}
+
+function generateLogId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export default function AddPhotosScreen() {
   const router = useRouter();
-  const [photos, setPhotos] = useState<string[]>([]);
+  const { activeProject } = useProject();
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const logIdRef = useRef<string>(generateLogId());
 
   const atMax = photos.length >= MAX_PHOTOS;
+  const hasUploading = photos.some((p) => p.status === 'uploading');
+
+  const uploadPhoto = async (photo: PhotoItem) => {
+    const projectId = activeProject?.id ?? 'unknown';
+    try {
+      const { uploadUrl, key } = await getPresignedUrl(
+        projectId,
+        logIdRef.current,
+        photo.filename,
+        photo.contentType,
+      );
+      await uploadImageToS3(uploadUrl, photo.uri, photo.contentType);
+      setPhotos((prev) =>
+        prev.map((p) => (p.uri === photo.uri ? { ...p, status: 'done', key } : p)),
+      );
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Upload failed';
+      setPhotos((prev) =>
+        prev.map((p) => (p.uri === photo.uri ? { ...p, status: 'error', error } : p)),
+      );
+    }
+  };
 
   const handleCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -36,7 +86,15 @@ export default function AddPhotosScreen() {
       quality: 0.8,
     });
     if (!result.canceled) {
-      setPhotos((prev) => [...prev, result.assets[0].uri].slice(0, MAX_PHOTOS));
+      const asset = result.assets[0];
+      const photo: PhotoItem = {
+        uri: asset.uri,
+        filename: `photo_${Date.now()}.jpg`,
+        contentType: asset.mimeType ?? 'image/jpeg',
+        status: 'uploading',
+      };
+      setPhotos((prev) => [...prev, photo].slice(0, MAX_PHOTOS));
+      uploadPhoto(photo);
     }
   };
 
@@ -56,20 +114,23 @@ export default function AddPhotosScreen() {
       selectionLimit: MAX_PHOTOS - photos.length,
     });
     if (!result.canceled) {
-      setPhotos((prev) =>
-        [...prev, ...result.assets.map((a) => a.uri)].slice(0, MAX_PHOTOS),
-      );
+      const newPhotos: PhotoItem[] = result.assets.map((asset, i) => ({
+        uri: asset.uri,
+        filename: `photo_${Date.now()}_${i}.jpg`,
+        contentType: asset.mimeType ?? 'image/jpeg',
+        status: 'uploading',
+      }));
+      setPhotos((prev) => [...prev, ...newPhotos].slice(0, MAX_PHOTOS));
+      newPhotos.forEach((photo) => uploadPhoto(photo));
     }
   };
 
-  const handleRemove = (index: number) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  const handleRemove = (uri: string) => {
+    setPhotos((prev) => prev.filter((p) => p.uri !== uri));
   };
 
   const handleFinish = () => {
-    Alert.alert('Registro criado com sucesso!', '', [
-      { text: 'OK', onPress: () => router.replace('/(app)/(tabs)') },
-    ]);
+    router.replace('/(app)/(tabs)');
   };
 
   const countLabel = `${photos.length}/${MAX_PHOTOS} foto${photos.length !== 1 ? 's' : ''}`;
@@ -107,20 +168,44 @@ export default function AddPhotosScreen() {
           </View>
         ) : (
           <View style={styles.grid}>
-            {photos.map((uri, index) => (
-              <View key={uri} style={styles.thumbnailContainer}>
+            {photos.map((photo) => (
+              <View key={photo.uri} style={styles.thumbnailContainer}>
                 <Image
-                  source={{ uri }}
-                  style={styles.thumbnailImage}
+                  source={{ uri: photo.uri }}
+                  style={[
+                    styles.thumbnailImage,
+                    photo.status === 'error' && styles.thumbnailDimmed,
+                  ]}
                   resizeMode="cover"
                 />
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => handleRemove(index)}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <X size={12} color={colors.textInverse} />
-                </TouchableOpacity>
+
+                {photo.status === 'uploading' && (
+                  <View style={styles.statusOverlay}>
+                    <ActivityIndicator size="small" color={colors.textInverse} />
+                  </View>
+                )}
+
+                {photo.status === 'error' && (
+                  <View style={[styles.statusOverlay, styles.errorOverlay]}>
+                    <AlertCircle size={20} color={colors.textInverse} />
+                  </View>
+                )}
+
+                {photo.status === 'done' && (
+                  <View style={styles.doneIndicator}>
+                    <Check size={10} color={colors.textInverse} />
+                  </View>
+                )}
+
+                {photo.status !== 'uploading' && (
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => handleRemove(photo.uri)}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                  >
+                    <X size={12} color={colors.textInverse} />
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
@@ -160,11 +245,20 @@ export default function AddPhotosScreen() {
         </TouchableOpacity>
         {photos.length > 0 && (
           <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonPrimary]}
+            style={[
+              styles.actionButton,
+              styles.actionButtonPrimary,
+              hasUploading && styles.actionButtonDisabled,
+            ]}
             onPress={handleFinish}
             activeOpacity={0.8}
+            disabled={hasUploading}
           >
-            <Check size={16} color={colors.textInverse} />
+            {hasUploading ? (
+              <ActivityIndicator size="small" color={colors.textInverse} />
+            ) : (
+              <Check size={16} color={colors.textInverse} />
+            )}
             <AppText size="base" weight="medium" color="inverse">
               Concluir
             </AppText>
@@ -222,6 +316,31 @@ const styles = StyleSheet.create({
     width: THUMBNAIL_SIZE,
     height: THUMBNAIL_SIZE,
     borderRadius: radius.md,
+  },
+  thumbnailDimmed: {
+    opacity: 0.5,
+  },
+  statusOverlay: {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: radius.md,
+    backgroundColor: colors.overlay,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorOverlay: {
+    backgroundColor: 'rgba(239,68,68,0.6)',
+  },
+  doneIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    width: 18,
+    height: 18,
+    borderRadius: radius.full,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   removeButton: {
     position: 'absolute',

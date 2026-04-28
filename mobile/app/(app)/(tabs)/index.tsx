@@ -1,7 +1,7 @@
-import { View, ScrollView, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, ScrollView, Image, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mic, Camera, FileText, Calendar, Sparkles, Users, Clock, Plus } from 'lucide-react-native';
+import { Mic, Camera, FileText, Calendar, Sparkles, Users, Clock, Plus, RefreshCw } from 'lucide-react-native';
 import { AppText } from '@/components/app-text';
 import { Card } from '@/components/card';
 import { ScreenHeader } from '@/components/screen-header';
@@ -9,8 +9,9 @@ import { StatsCard } from '@/components/stats-card';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
-import { entries } from '@/data/mock-data';
+import { Entry } from '@/data/mock-data';
 import { useProject } from '@/context/project-context';
+import { useEntries } from '@/hooks/use-entries';
 
 const FAB_SIZE = 56;
 
@@ -45,10 +46,10 @@ function formatDateLabel(dateStr: string): string {
   });
 }
 
-type GroupedEntries = { label: string; items: typeof entries }[];
+type GroupedEntries = { label: string; items: Entry[] }[];
 
-function groupEntriesByDate(entriesList: typeof entries): GroupedEntries {
-  const map: Record<string, typeof entries> = {};
+function groupEntriesByDate(entriesList: Entry[]): GroupedEntries {
+  const map: Record<string, Entry[]> = {};
   for (const entry of entriesList) {
     if (!map[entry.date]) map[entry.date] = [];
     map[entry.date].push(entry);
@@ -63,9 +64,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { activeProject } = useProject();
+  const { entries, loading, error, refetch } = useEntries(activeProject?.id ?? null);
   const tabBarHeight = 60 + insets.bottom;
   const fabBottom = tabBarHeight + spacing[4];
   const grouped = groupEntriesByDate(entries);
+
+  const totalPeople = entries.reduce((sum, e) => sum + e.teamSize, 0);
 
   return (
     <View style={styles.root}>
@@ -110,10 +114,44 @@ export default function HomeScreen() {
         </View>
 
         {/* Stats */}
-        <StatsCard records={12} hours="48h" people={32} />
+        <StatsCard records={entries.length} hours="—" people={totalPeople} />
+
+        {/* Loading */}
+        {loading && (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        )}
+
+        {/* Error */}
+        {!loading && error && (
+          <View style={styles.centered}>
+            <AppText size="sm" color="secondary" style={styles.messageText}>
+              {error}
+            </AppText>
+            <TouchableOpacity style={styles.retryButton} onPress={refetch} activeOpacity={0.7}>
+              <RefreshCw size={16} color={colors.primary} />
+              <AppText size="sm" weight="medium" style={styles.retryText}>
+                Tentar novamente
+              </AppText>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Empty state */}
+        {!loading && !error && entries.length === 0 && (
+          <View style={styles.centered}>
+            <AppText size="sm" color="secondary" style={styles.messageText}>
+              Nenhum registro encontrado para este projeto.
+            </AppText>
+            <AppText size="xs" color="secondary" style={styles.messageText}>
+              Use o botão de microfone para adicionar o primeiro registro.
+            </AppText>
+          </View>
+        )}
 
         {/* Timeline */}
-        {grouped.map(({ label, items }) => (
+        {!loading && !error && grouped.map(({ label, items }) => (
           <View key={label} style={styles.dateGroup}>
             <AppText size="sm" weight="medium" color="secondary">
               {label}
@@ -121,12 +159,14 @@ export default function HomeScreen() {
             <View style={styles.entryList}>
               {items.map((entry) => (
                 <Card key={entry.id} shadow="sm" radius="xl">
-                  <Image
-                    source={{ uri: entry.photo }}
-                    style={styles.entryImage}
-                    resizeMode="cover"
-                    alt={entry.description}
-                  />
+                  {!!entry.photo && (
+                    <Image
+                      source={{ uri: entry.photo }}
+                      style={styles.entryImage}
+                      resizeMode="cover"
+                      alt={entry.description}
+                    />
+                  )}
                   <View style={styles.entryContent}>
                     <View style={styles.pillRow}>
                       <View style={styles.servicePill}>
@@ -148,10 +188,12 @@ export default function HomeScreen() {
                         <Users size={14} color={colors.textMuted} />
                         <AppText size="xs" color="secondary">{entry.teamSize} pessoas</AppText>
                       </View>
-                      <View style={styles.metaItem}>
-                        <Clock size={14} color={colors.textMuted} />
-                        <AppText size="xs" color="secondary">{entry.duration}</AppText>
-                      </View>
+                      {!!entry.duration && (
+                        <View style={styles.metaItem}>
+                          <Clock size={14} color={colors.textMuted} />
+                          <AppText size="xs" color="secondary">{entry.duration}</AppText>
+                        </View>
+                      )}
                     </View>
                   </View>
                 </Card>
@@ -220,6 +262,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warning,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Feedback states
+  centered: {
+    alignItems: 'center',
+    paddingVertical: spacing[10],
+    gap: spacing[3],
+  },
+  messageText: {
+    textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  retryText: {
+    color: colors.primary,
   },
   // Date groups
   dateGroup: {

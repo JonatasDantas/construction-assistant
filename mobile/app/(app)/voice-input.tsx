@@ -8,6 +8,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { colors } from '@/theme/colors';
 import { spacing, radius } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
+import { submitVoiceRecording } from '@/utils/voice-api';
 
 // --- Types ---
 
@@ -19,24 +20,7 @@ interface StructuredEntry {
   teamSize: string;
   duration: string;
   description: string;
-}
-
-// --- Mock API (replace with real API calls) ---
-
-async function mockTranscribeAudio(_uri: string | null): Promise<string> {
-  await new Promise<void>((r) => setTimeout(r, 800));
-  return 'Hoje fizemos a concretagem da laje do terceiro pavimento. Foram 8 pessoas trabalhando durante 4 horas. Tudo correu bem, sem intercorrências.';
-}
-
-async function mockSummarizeText(_text: string): Promise<StructuredEntry> {
-  await new Promise<void>((r) => setTimeout(r, 700));
-  return {
-    service: 'Concretagem',
-    category: 'Estrutura',
-    teamSize: '8 pessoas',
-    duration: '4 horas',
-    description: 'Concretagem da laje do 3º pavimento finalizada conforme cronograma. Equipe de 8 funcionários trabalhou durante 4 horas sem intercorrências registradas.',
-  };
+  formalDescription: string;
 }
 
 // --- Screen ---
@@ -164,17 +148,25 @@ export default function VoiceInputScreen() {
       await recording?.stopAndUnloadAsync();
       uri = recording?.getURI() ?? null;
     } catch {
-      // Continue with mock even if recording cleanup fails
+      // Continue processing even if recording cleanup fails
     }
     await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
     try {
-      const text = await mockTranscribeAudio(uri);
-      const entry = await mockSummarizeText(text);
-      setTranscription(text);
-      setStructured(entry);
+      if (!uri) throw new Error('Arquivo de áudio não encontrado');
+      const result = await submitVoiceRecording(uri);
+      setTranscription(result.description);
+      setStructured({
+        service: result.serviceType,
+        category: result.serviceType,
+        teamSize: `${result.teamSize} pessoa${result.teamSize !== 1 ? 's' : ''}`,
+        duration: '',
+        description: result.formalDescription,
+        formalDescription: result.formalDescription,
+      });
       setStage('result');
-    } catch {
-      Alert.alert('Erro', 'Não foi possível processar o áudio. Tente novamente.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      Alert.alert('Erro', `Não foi possível processar o áudio: ${message}`);
       setStage('idle');
     }
   };
@@ -312,12 +304,12 @@ export default function VoiceInputScreen() {
               activeOpacity={0.8}
               onPress={() =>
                 router.push({
-                  pathname: '/(app)/review-entry',
+                  pathname: '/(app)/add-photos',
                   params: {
                     serviceType: structured?.service ?? '',
                     teamSize: structured?.teamSize ?? '',
-                    description: transcription,
-                    formalDescription: structured?.description ?? '',
+                    description: structured?.description ?? '',
+                    formalDescription: structured?.formalDescription ?? '',
                   },
                 })
               }
